@@ -40,7 +40,8 @@ while is_used "$port"; do
 done
 
 # Start server
-server_python_bin=$HOME/miniconda3/envs/pointact/bin/python
+# pixi env (activation sets CUDA_HOME and, on aarch64, the NVRTC 12.9 path); override with SERVER_PYTHON
+server_python_bin=${SERVER_PYTHON:-pixi run python}
 
 ${server_python_bin} scripts/run_server.py \
     --args.seed ${seed} \
@@ -56,7 +57,7 @@ echo "Server started, PID=$SERVER_PID"
 sleep 20
 
 # Start client
-client_python_bin=$HOME/miniconda3/envs/rlbench/bin/python
+client_python_bin=${CLIENT_PYTHON:-$HOME/miniconda3/envs/rlbench/bin/python}
 
 singularity exec --bind $HOME:$HOME,$SCRATCH:$SCRATCH --nv ${sif_image} \
     xvfb-run -a ${client_python_bin} \

@@ -41,7 +41,8 @@ done
 echo "port=$port"
 
 # Start server
-server_python_bin=$HOME/miniconda3/envs/pointact/bin/python
+# pixi env (activation sets CUDA_HOME and, on aarch64, the NVRTC 12.9 path); override with SERVER_PYTHON
+server_python_bin=${SERVER_PYTHON:-pixi run python}
 
 ${server_python_bin} scripts/run_server.py \
     --args.seed ${seed} \
@@ -57,7 +58,8 @@ echo "Server started, PID=$SERVER_PID"
 sleep 20
 
 # Start client
-client_python_bin=$HOME/miniconda3/envs/libero/bin/python
+# pixi `libero` env (activation sets MUJOCO_GL / LIBERO_CONFIG_PATH); override with CLIENT_PYTHON
+client_python_bin=${CLIENT_PYTHON:-pixi run -e libero python}
 
 ${client_python_bin} experiments/2_libero/run_libero_client.py \
     --args.seed ${seed} \

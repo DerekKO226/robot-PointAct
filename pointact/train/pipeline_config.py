@@ -84,7 +84,8 @@ class TrainPipelineConfig(TrainingArguments):
     data_path: str = field(default=None, metadata={"help": "Path to training data or yaml config."})
     train_mm_only: bool = False
     train_lerobot_only: bool = True
-    lerobot_data_video_backend: str | None = "torchcodec"
+    # None: lerobot picks torchcodec when installed, else pyav (torchcodec has no linux-aarch64 wheels for torch 2.7)
+    lerobot_data_video_backend: str | None = None
 
     """ training parameters """
     cache_dir: str | None = field(default=None)

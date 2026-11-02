@@ -44,6 +44,68 @@ Please follow the main setup guide in [INSTALLATION.md](INSTALLATION.md). The re
 2. Create separate simulator environments.
 3. Use the server-client evaluation pipeline since the policy and simulator usually need different environments.
 
+### Using pixi
+
+The core `pointact` environment is managed by [pixi](https://pixi.sh). Its configuration is in the `[tool.pixi.*]` sections of `pyproject.toml`, and `pixi.lock` pins every package for `linux-64` and `linux-aarch64` (torch 2.7.0 + CUDA 12.8). The LIBERO simulator has its own pixi environment, `libero`. The other simulators (RLBench, RoboCasa365) still use conda, as described in each benchmark's README.
+
+**1. Set up the environment (once)**
+
+```bash
+curl -fsSL https://pixi.sh/install.sh | bash   # install pixi; make sure ~/.pixi/bin is on your PATH
+
+pixi install                 # create the environment in .pixi/envs/default
+pixi run build-cuda-ext      # linux-aarch64 only (e.g. DGX Spark): compile spconv, torch-scatter, flash-attn (~30 min)
+pixi run check-env           # check imports and run each CUDA extension on the GPU
+```
+
+On linux-64, `pixi install` already installs prebuilt spconv / torch-scatter / flash-attn, so skip `build-cuda-ext`.
+`build-cuda-ext` targets compute capability 12.0 by default. Use `CUDA_ARCH=9.0 pixi run build-cuda-ext` for other GPUs, or build a single package with `pixi run build-cuda-ext spconv|torch-scatter|flash-attn`.
+
+**2. Run commands inside the environment**
+
+```bash
+# prefix any command with `pixi run`
+pixi run bash experiments/2_libero/train_pointact_concerto.sh experiments/2_libero/data_configs/data-libero-spatial-point-frontview.yaml
+pixi run python data_prep/prepare_robot_state_action_stats.py --help
+
+# or open a shell with the environment activated
+pixi shell
+```
+
+**3. Evaluation**
+
+Set up the LIBERO simulator environment once (CPU-only torch, MuJoCo rendering with EGL):
+
+```bash
+pixi install -e libero
+pixi run -e libero setup-libero   # downloads LIBERO at a pinned commit into .pixi/build-src/LIBERO and writes its config
+```
+
+The eval scripts start the policy server with `pixi run python`. The LIBERO client runs with `pixi run -e libero python`, and the RLBench client with the conda environment (`$HOME/miniconda3/envs/rlbench/bin/python`). Override either with `SERVER_PYTHON` / `CLIENT_PYTHON`:
+
+```bash
+bash experiments/2_libero/eval_libero.sh spatial <expr-dir> <ckpt-step> rot6d "--args.use_depth --args.delta_action"
+```
+
+**4. Managing packages**
+
+```bash
+pixi add --pypi <package>    # add a PyPI dependency (written to pyproject.toml)
+pixi add <package>           # add a conda-forge dependency
+pixi install                 # sync the environment after editing pyproject.toml by hand
+```
+
+Commit both `pyproject.toml` and `pixi.lock` after changing dependencies. Do not use `pip install` for regular dependencies, since pixi will not track them.
+
+**Available tasks:** `check-env`, `build-cuda-ext`, `lint` (`ruff check .`), `fmt` (`ruff format .`), and `setup-libero` (in the `libero` environment).
+
+**Notes**
+- On aarch64, the source-built CUDA extensions are not recorded in `pixi.lock`. `pixi install` keeps them, but after recreating the environment (e.g. `rm -rf .pixi`) run `pixi run build-cuda-ext` again.
+- DGX Spark / GB10 (sm_121) needs NVRTC 12.9 or newer, but the aarch64 torch wheel bundles NVRTC 12.8. On linux-aarch64, pixi installs NVRTC 12.9 and puts it first on `LD_LIBRARY_PATH` when the environment is activated. Always start Python through `pixi run` or `pixi shell`. Running `.pixi/envs/default/bin/python` directly fails during training with `nvrtc: error: invalid value for --gpu-architecture`.
+- `torchcodec` has no linux-aarch64 wheel, so LeRobot decodes videos with pyav there.
+- `$SCRATCH` (pretrained weights and experiment outputs) defaults to `~/scratch` inside the pixi environment.
+- Training scripts run offline (`TRANSFORMERS_OFFLINE=1`), so download the pretrained backbones first (see [INSTALLATION.md](INSTALLATION.md#pretrained-backbones)), e.g. `pixi run hf download --repo-type model Qwen/Qwen2.5-VL-3B-Instruct`.
+
 ## Supported Benchmarks
 
 This repository currently supports three simulators:

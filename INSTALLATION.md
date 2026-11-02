@@ -3,7 +3,30 @@
 We use the `pointact` environment for model training, checkpoint loading, data preprocessing, and the policy server; use simulator-specific environments for environment rollouts and evaluation clients.
 
 
-## PointAct Environment
+## PointAct Environment (pixi, recommended)
+
+The `pointact` environment is managed by [pixi](https://pixi.sh). The configuration lives in the `[tool.pixi.*]` sections of `pyproject.toml`, and `pixi.lock` pins every package for `linux-64` and `linux-aarch64` (CUDA 12.8, torch 2.7.0+cu128).
+
+```bash
+curl -fsSL https://pixi.sh/install.sh | bash   # install pixi once
+
+git clone https://github.com/cshizhe/PointAct.git
+cd PointAct
+pixi install                  # creates .pixi/envs/default
+
+# linux-aarch64 only (e.g. DGX Spark / GB10): compile spconv, torch-scatter, flash-attn from source.
+# On linux-64, prebuilt wheels are installed by `pixi install`.
+pixi run build-cuda-ext       # or: pixi run build-cuda-ext spconv|torch-scatter|flash-attn
+
+pixi run check-env            # imports + GPU smoke test of every CUDA extension
+```
+
+Run commands inside the environment with `pixi run <cmd>` (e.g. `pixi run bash experiments/2_libero/train_pointact_concerto.sh ...`) or open a shell with `pixi shell`. The eval scripts start the policy server with `pixi run python` by default (on DGX Spark the activation step is required to load NVRTC 12.9); set `SERVER_PYTHON` / `CLIENT_PYTHON` to use other interpreters. The LIBERO simulator has its own pixi environment: `pixi install -e libero && pixi run -e libero setup-libero`.
+
+`build-cuda-ext` builds for compute capability 12.0 by default; set `CUDA_ARCH` (e.g. `CUDA_ARCH=9.0`) for other GPUs. Note: `pixi install` does not remove these source-built packages, but a fresh environment (e.g. after `rm -rf .pixi`) needs `build-cuda-ext` again.
+
+
+## PointAct Environment (conda, original)
 
 ```bash
 git clone https://github.com/cshizhe/PointAct.git
@@ -80,6 +103,6 @@ Do not install simulator packages into the `pointact` environment. Keep one cond
 
 | Simulator / platform | Environment | Installation and experiment notes |
 | --- | --- | --- |
-| LIBERO | `libero` | [experiments/2_libero/README.md](experiments/2_libero/README.md) |
+| LIBERO | `libero` (pixi: `pixi install -e libero && pixi run -e libero setup-libero`, or conda) | [experiments/2_libero/README.md](experiments/2_libero/README.md) |
 | RLBench | `rlbench` | [experiments/10_rlbench/README.md](experiments/10_rlbench/README.md) |
 | RoboCASA365 | `robocasa365` | [experiments/13_robocasa365/README.md](experiments/13_robocasa365/README.md) |
