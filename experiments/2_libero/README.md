@@ -61,3 +61,27 @@ bash experiments/2_libero/eval_libero.sh <task-suite> <expr-dir> <ckpt-step> <ro
 # for example
 bash experiments/2_libero/eval_libero.sh spatial $SCRATCH/datasets/PointAct_exprs/libero/vla2_point/data-libero-spatial-point-frontview-rot6d-image.frontview_ck16_lr5e-5_gpu1_bs128_epoch50-freeze.vlm 21300 rot6d " --args.use_depth --args.verbose --args.delta_action"
 ```
+
+## Golden I/O recording and replay
+
+To check how much a changed model differs from a reference model, record every policy query of a
+reference evaluation (raw observations, request options, returned action chunk and episode outcome),
+then replay the same inputs through another checkpoint and compare the actions.
+
+```bash
+# 1. Record during a normal evaluation of the reference checkpoint (one .pkl per episode).
+#    --args.record_dir also sends a per-query seed, so the server output is reproducible.
+bash experiments/2_libero/eval_libero.sh spatial <ref-expr-dir> <ckpt-step> rot6d \
+    "--args.use_depth --args.delta_action --args.record_dir <golden-dir>"
+
+# 2. Replay the recorded inputs through any checkpoint (open-loop, pointact env).
+pixi run python scripts/replay_golden.py --args.golden_dir <golden-dir> \
+    --args.pretrained_path <expr-dir>/checkpoint-<step> --args.out_dir <out-dir>
+```
+
+`replay_golden.py` writes `summary.json` (overall, per task and per golden episode outcome),
+`per_query.csv` and `actions.pkl`. Metrics use the executed part of each chunk (`replan_steps`) and the
+full chunk (`*_chunk`): position error (cm), rotation error (deg) and gripper open/close agreement.
+Replay the reference checkpoint itself first: `--args.seed_offset 0` should reproduce the golden
+actions, and `--args.seed_offset 1` gives the noise floor from sampling. Open-loop differences are a
+proxy; closed-loop success rate from `eval_libero.sh` remains the final check.
