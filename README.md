@@ -117,6 +117,23 @@ This repository currently supports three simulators:
 | [RoboCASA365](experiments/13_robocasa365/README.md) | [RoboCASA](https://github.com/robocasa/robocasa) | [`experiments/13_robocasa365`](experiments/13_robocasa365) |
 
 
+## Released Checkpoints
+
+Checkpoints reproduced in this fork on a single NVIDIA DGX Spark (GB10). These are not official releases from the PointAct authors.
+
+| Model | Benchmark | Success | Weights |
+| --- | --- | --- | --- |
+| PointAct-Concerto (regression, 20k steps, bs32) | LIBERO-Spatial | 95.4% (477/500) | [kodaiyen/pointact-concerto-libero-spatial](https://huggingface.co/kodaiyen/pointact-concerto-libero-spatial) |
+
+```bash
+# The eval scripts expect <expr-dir>/checkpoint-<step>
+pixi run hf download kodaiyen/pointact-concerto-libero-spatial \
+    --local-dir exprs/pointact-concerto-libero-spatial/checkpoint-20000
+bash experiments/2_libero/eval_libero.sh spatial exprs/pointact-concerto-libero-spatial 20000 rot6d \
+    "--args.use_depth --args.delta_action"
+```
+
+
 ## Supported Models
 
 This repository includes PointAct and several comparison VLA policies used in our experiments:
