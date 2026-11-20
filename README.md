@@ -36,6 +36,26 @@ Official implementation of [PointACT: Vision-Language-Action Models with Multi-S
 
 PointAct is a 3D-aware vision-language-action policy for robot manipulation. It keeps a pretrained vision-language backbone for semantic understanding and adds a dedicated point-action expert so that multi-scale 3D geometry can directly shape action decoding.
 
+> [!IMPORTANT]
+> **Tested platform: NVIDIA DGX Spark only.** This fork has been verified end to end on a single NVIDIA DGX Spark: environment setup, training, policy server and closed-loop LIBERO evaluation. **x86_64 (`linux-64`) has not been tested.** `pixi.lock` includes `linux-64`, but those environments have never been run, and results there (including success rates) may differ. See [Tested Platform](#tested-platform).
+
+## Tested Platform
+
+| Component | Version |
+| --- | --- |
+| System | NVIDIA DGX Spark, GB10 GPU (compute capability 12.1 / sm_121), **aarch64** (`linux-aarch64`) |
+| OS / driver | Ubuntu 24.04.3 LTS, kernel 6.14.0-1013-nvidia, NVIDIA driver 580.95.05 |
+| PyTorch | 2.7.0+cu128, with NVRTC 12.9.86 (`nvidia-cuda-nvrtc-cu12`) loaded first |
+| Libraries | transformers 5.5.4, spconv 2.3.8 + cumm 0.8.2, flash-attn 2.8.3, torch-scatter 2.1.2 |
+| Simulator | MuJoCo 3.3.6 (pixi `libero` environment) |
+
+Why results on x86_64 may differ:
+- On aarch64, the CUDA extensions (spconv, flash-attn, torch-scatter) are compiled from source by `pixi run build-cuda-ext`. On `linux-64`, pixi installs prebuilt wheels instead, so the CUDA kernels are different builds.
+- GPU architecture, attention kernels and MuJoCo builds all differ between platforms. Small numerical differences can add up over a closed-loop rollout and change the success rate.
+- The prebuilt-wheel installation path on `linux-64` has not been run, so it may also need fixes to install.
+
+If you run on another platform, re-evaluate the [released checkpoint](#released-checkpoints) and compare against the numbers reported here before relying on them.
+
 ## Installation
 
 Please follow the main setup guide in [INSTALLATION.md](INSTALLATION.md). The recommended workflow is:
@@ -119,7 +139,9 @@ This repository currently supports three simulators:
 
 ## Released Checkpoints
 
-Checkpoints reproduced in this fork on a single NVIDIA DGX Spark (GB10). These are not official releases from the PointAct authors.
+Checkpoints reproduced in this fork on a single NVIDIA DGX Spark (GB10). These are not official releases from the PointAct authors. The success rates were measured on that platform only (see [Tested Platform](#tested-platform)).
+
+The weights are built with Qwen and are for **non-commercial use only**. They are a derivative of [Qwen2.5-VL-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct), which is under the Qwen RESEARCH LICENSE AGREEMENT, and [Concerto](https://huggingface.co/Pointcept/Concerto), which is under CC BY-NC 4.0. See the model card for details.
 
 | Model | Benchmark | Success | Weights |
 | --- | --- | --- | --- |
