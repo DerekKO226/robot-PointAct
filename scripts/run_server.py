@@ -116,6 +116,11 @@ class Policy:
             obs_outfile = os.path.join(self.save_dir, f"{self.num_steps}_obs.npy")
             np.save(obs_outfile, batch)
 
+        # Reseed per query so the same input gives the same output (point subsampling,
+        # flow-matching noise and PTv3 order shuffling all draw from these RNGs).
+        if options.get("request_seed") is not None:
+            set_seed(int(options["request_seed"]))
+
         # start_time = time.time()
         batch_actions = self.processor.select_action(
             self.model,

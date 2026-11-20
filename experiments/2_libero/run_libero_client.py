@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import logging
 import pathlib
+import pickle
 from pathlib import Path
 
 import imageio
@@ -42,6 +43,12 @@ class ClientArgs:
     save_video: bool = False
     verbose: bool = False
 
+    # Golden I/O recording: one pickle per episode with every policy query (raw inputs,
+    # options, returned actions) and the episode outcome. Replay with scripts/replay_golden.py.
+    record_dir: str = ""
+    # Send a per-query seed so the server output is reproducible (always on when recording).
+    seed_per_query: bool = False
+
     host: str = "localhost"
     port: int = 5555
 
@@ -69,6 +76,11 @@ def setup_logging(filename=None):
     logger.addHandler(console_handler)
 
 
+def query_seed(seed: int, task_id: int, episode_idx: int, query_idx: int) -> int:
+    """Deterministic per-query seed, stored in the recording so replays reuse it."""
+    return int(np.random.SeedSequence([seed, task_id, episode_idx, query_idx]).generate_state(1)[0])
+
+
 def main(args: ClientArgs) -> None:
     assert args.pred_rot_type in ["rot6d", "euler"]
 
@@ -92,6 +104,11 @@ def main(args: ClientArgs) -> None:
     
     setup_logging(log_filename)
     logging.info(f"Arguments: {json.dumps(dataclasses.asdict(args), indent=4)}")
+
+    seed_per_query = args.seed_per_query or bool(args.record_dir)
+    if args.record_dir:
+        Path(args.record_dir).mkdir(parents=True, exist_ok=True)
+        logging.info(f"Record golden I/O in {args.record_dir}")
 
     # Set random seed
     set_seed(args.seed)
@@ -150,6 +167,7 @@ def main(args: ClientArgs) -> None:
 
             # Setup
             replay_images = []
+            queries = []
 
             if args.verbose:
                 logging.info(f"Starting episode {task_episodes + 1}...")
@@ -193,15 +211,25 @@ def main(args: ClientArgs) -> None:
                             )]
 
                     points_workspace = libero_env.get_points_workspace(obs)
-                    
-                    ov_out = policy_client.get_action(
-                        batch, options={
-                            "pred_rot_type": args.pred_rot_type, 
-                            "points_workspace": points_workspace,
-                            "remove_arm": args.remove_arm,
-                        }
-                    )
+
+                    options = {
+                        "pred_rot_type": args.pred_rot_type,
+                        "points_workspace": points_workspace,
+                        "remove_arm": args.remove_arm,
+                    }
+                    if seed_per_query:
+                        options["request_seed"] = query_seed(args.seed, task_id, episode_idx, len(queries))
+
+                    ov_out = policy_client.get_action(batch, options=options)
                     action_chunk = ov_out.action[0].copy()
+
+                    if args.record_dir:
+                        queries.append({
+                            "env_step": t,
+                            "batch": batch,
+                            "options": options,
+                            "action": np.asarray(ov_out.action).copy(),  # raw server output, before post-processing
+                        })
 
                     if args.post_process_action:
                         action_chunk[..., -1] = 2 * (1 - action_chunk[..., -1]) - 1
@@ -230,6 +258,22 @@ def main(args: ClientArgs) -> None:
             # Save a replay video of the episode
             suffix = "success" if done else "failure"
             task_segment = task_description.replace(" ", "_")
+            if args.record_dir:
+                record = {
+                    "meta": {
+                        "task_suite_name": args.task_suite_name,
+                        "task_id": task_id,
+                        "task_description": task_description,
+                        "episode_idx": episode_idx,
+                        "success": bool(done),
+                        "num_env_steps": t + 1,
+                        "client_args": dataclasses.asdict(args),
+                    },
+                    "queries": queries,
+                }
+                record_file = Path(args.record_dir) / f"task{task_id:02d}_ep{episode_idx:03d}.pkl"
+                with open(record_file, "wb") as f:
+                    pickle.dump(record, f, protocol=pickle.HIGHEST_PROTOCOL)
             if video_out_dir is not None:
                 imageio.mimwrite(
                     pathlib.Path(video_out_dir) / f"{task_segment}_rollout{episode_idx}_{suffix}.mp4",
